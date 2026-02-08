@@ -39,8 +39,10 @@ def extract_transcript(video_id: str, cookies: Optional[str], user_agent: Option
             "subtitlesformat": "json3",
             "quiet": True,
             "no_warnings": True,
+            "format": "best",
         }
 
+        # cookies
         if cookies:
             cookie_file = tempfile.NamedTemporaryFile(
                 mode="w", suffix=".txt", delete=False
