@@ -14,8 +14,10 @@
     "https://www.youtube.com/*",
     "https://youtube.com/*",
     "https://ytsum.ddoffy.org/*",
-    "http://localhost:8181/*",
-    "http://127.0.0.1:8181/*"
+    "https://pyytsum.ddoffy.org/*",
+    "http://localhost:8282/*",
+    "http://127.0.0.1:8282/*",
+    "*://*/*"
   ],
   "action": {
     "default_popup": "popup.html",

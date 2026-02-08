@@ -21,6 +21,7 @@ interface Elements {
   result: HTMLElement;
   copyBtn: HTMLButtonElement;
   newSummaryBtn: HTMLButtonElement;
+  serverUrlInput: HTMLInputElement;
 }
 
 // DOM Elements
@@ -39,6 +40,7 @@ const elements = {
   result: document.getElementById('result')!,
   copyBtn: document.getElementById('copy-btn') as HTMLButtonElement,
   newSummaryBtn: document.getElementById('new-summary-btn') as HTMLButtonElement,
+  serverUrlInput: document.getElementById('server-url') as HTMLInputElement,
 };
 
 const summarizeBtn = document.getElementById('summarize-btn') as HTMLButtonElement;
@@ -87,13 +89,19 @@ declare global {
 document.addEventListener('DOMContentLoaded', init);
 
 // Constants
-const API_URL = 'https://ytsum.ddoffy.org';
+// Constants
+const DEFAULT_API_URL = 'https://pyytsum.ddoffy.org';
+
 
 async function init() {
   // Button handlers
   summarizeBtn.addEventListener('click', summarizeVideo as EventListener);
   elements.copyBtn.addEventListener('click', copyResult as EventListener);
   elements.newSummaryBtn.addEventListener('click', resetUI as EventListener);
+  elements.serverUrlInput.addEventListener('change', saveServerUrl);
+
+  // Load settings
+  await loadSettings();
 
   // Check current tab
   await checkCurrentTab();
@@ -365,9 +373,10 @@ async function summarizeVideo() {
       requestBody.userAgent = navigator.userAgent;
     }
 
-    console.log('Sending request to:', `${API_URL}/api/summary`);
+    const apiUrl = elements.serverUrlInput.value.replace(/\/$/, '');
+    console.log('Sending request to:', `${apiUrl}/api/summary`);
 
-    const response = await fetch(`${API_URL}/api/summary`, {
+    const response = await fetch(`${apiUrl}/api/summary`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -445,4 +454,31 @@ async function copyResult() {
 function resetUI() {
   elements.resultContainer.classList.add('hidden');
   hideStatus();
+}
+
+async function loadSettings() {
+  try {
+    const result = await chrome.storage.local.get(['serverUrl']);
+    if (result.serverUrl) {
+      elements.serverUrlInput.value = result.serverUrl;
+    } else {
+      elements.serverUrlInput.value = DEFAULT_API_URL;
+    }
+  } catch (error) {
+    console.error('Error loading settings:', error);
+    elements.serverUrlInput.value = DEFAULT_API_URL;
+  }
+}
+
+async function saveServerUrl() {
+  try {
+    let url = elements.serverUrlInput.value.trim();
+    if (!url) {
+      url = DEFAULT_API_URL;
+      elements.serverUrlInput.value = url;
+    }
+    await chrome.storage.local.set({ serverUrl: url });
+  } catch (error) {
+    console.error('Error saving settings:', error);
+  }
 }
