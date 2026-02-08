@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Summary</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>YouTube Summary</h1>
+      <p class="subtitle">AI-powered video summarization</p>
+    </header>
+
+    <div id="status-container" class="hidden">
+      <div id="status" class="status"></div>
+    </div>
+
+    <div id="not-youtube" class="message hidden">
+      <p>Please navigate to a YouTube video page to use this extension.</p>
+    </div>
+
+    <div id="video-info" class="hidden">
+      <div class="video-card">
+        <img id="video-thumbnail" src="" alt="Video thumbnail" class="thumbnail">
+        <div class="video-details">
+          <h3 id="video-title">Loading...</h3>
+          <p id="video-id" class="video-id"></p>
+        </div>
+      </div>
+
+      <div class="cookie-status">
+        <span id="cookie-indicator" class="indicator"></span>
+        <span id="cookie-text">Checking cookies...</span>
+      </div>
+
+      <div class="checkbox-container">
+        <input type="checkbox" id="send-cookies" checked>
+        <label for="send-cookies">Send Cookies (fixes restricted videos)</label>
+      </div>
+
+      <button id="summarize-btn" class="btn primary">
+        <span class="btn-text">Summarize Video</span>
+        <span class="btn-loading hidden">
+          <span class="spinner"></span>
+          Generating...
+        </span>
+      </button>
+    </div>
+
+    <div id="result-container" class="hidden">
+      <h2>Summary</h2>
+      <div id="result" class="result"></div>
+      <div class="actions">
+        <button id="copy-btn" class="btn secondary">Copy to Clipboard</button>
+        <button id="new-summary-btn" class="btn secondary">New Summary</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
