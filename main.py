@@ -4,7 +4,7 @@ import re
 import tempfile
 from typing import Optional
 
-import google.generativeai as genai
+from google import genai
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -13,7 +13,7 @@ from yt_dlp import YoutubeDL
 
 load_dotenv()
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 app = FastAPI(title="YouTube Summary API")
 
@@ -39,7 +39,8 @@ def extract_transcript(video_id: str, cookies: Optional[str], user_agent: Option
             "subtitlesformat": "json3",
             "quiet": True,
             "no_warnings": True,
-            "format": "best",
+            "format": "bestaudio/best",
+            "ignore_no_formats_error": True,
         }
 
         # cookies
@@ -130,7 +131,7 @@ def summarize_with_gemini(
     transcript: str, title: str, channel: str, duration: str
 ) -> dict:
     """Summarize the transcript using Google Gemini API."""
-    model = genai.GenerativeModel("gemini-2.0-flash")
+
 
     prompt = f"""You are a helpful assistant that summarizes YouTube videos.
 
@@ -153,11 +154,12 @@ Respond in JSON format:
   "takeaways": ["...", "..."]
 }}"""
 
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.types.GenerationConfig(
-            response_mime_type="application/json",
-        ),
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt,
+        config={
+            "response_mime_type": "application/json",
+        },
     )
 
     return json.loads(response.text)
