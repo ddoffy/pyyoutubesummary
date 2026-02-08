@@ -15,7 +15,8 @@ dependencies = [
     "google-genai>=0.1.0",
     "curl-cffi>=0.5.10",
     "yt-dlp>=2023.0.0",
-    "pydantic>=1.8.0"
+    "pydantic>=1.8.0",
+    "youtube-transcript-api"
 ]
 
 [tool.setuptools]

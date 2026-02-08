@@ -1,8 +1,6 @@
-import glob
 import json
 import os
 import re
-import tempfile
 from typing import Optional
 
 from google import genai
@@ -11,6 +9,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from yt_dlp import YoutubeDL
+from youtube_transcript_api import YouTubeTranscriptApi
 
 load_dotenv()
 
@@ -26,92 +25,110 @@ class SummaryRequest(BaseModel):
     userAgent: Optional[str] = None
 
 
-def extract_transcript(video_id: str, cookies: Optional[str], user_agent: Optional[str]) -> str:
-    """Extract transcript/subtitles from a YouTube video using yt-dlp."""
+def extract_transcript(video_id: str, cookies: Optional[str], user_agent: Optional[str]) -> tuple[str, str, str, str]:
+    """Extract transcript and metadata from a YouTube video."""
+    
+    # 1. Get Metadata using yt-dlp (metadata only, no subtitles download)
     url = f"https://www.youtube.com/watch?v={video_id}"
+    video_title = "Unknown"
+    video_channel = "Unknown"
+    video_duration = "Unknown"
 
-    cookie_file = None
-    # Use a temporary directory for the download to keep it isolated
-    with tempfile.TemporaryDirectory() as temp_dir:
-        try:
-            ydl_opts = {
-                "skip_download": True,
-                "writesubtitles": True,
-                "writeautomaticsub": True,
-                "subtitleslangs": ["all"],
-                "subtitlesformat": "json3",
-                "quiet": True,
-                "no_warnings": True,
-                "format": "bestaudio/best",
-                "ignore_no_formats_error": True,
-                "outtmpl": f"{temp_dir}/%(id)s",
-                "paths": {"home": temp_dir},
-            }
+    try:
+        ydl_opts = {
+            "skip_download": True,
+            "quiet": True,
+            "no_warnings": True,
+            "format": "bestaudio/best",
+            "ignore_no_formats_error": True,
+        }
+        if user_agent:
+            ydl_opts["http_headers"] = {"User-Agent": user_agent}
+        
+        # We don't use cookies for metadata to avoid complexity, usually strictly generic metadata is fine.
+        # If restricted, it might fail, but currently user is facing subtitle 429s which are distinct.
 
-            if cookies:
-                cookie_file = tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".txt", delete=False
-                )
-                # Ensure cookies are written with a newline at the end if needed
-                if not cookies.endswith('\n'):
-                     cookies += '\n'
-                cookie_file.write(cookies)
-                cookie_file.close()
-                ydl_opts["cookiefile"] = cookie_file.name
-
-            if user_agent:
-                ydl_opts["http_headers"] = {"User-Agent": user_agent}
-
-            with YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                
-                if not info:
-                    raise HTTPException(status_code=404, detail="Video not found")
-
-                # Find the downloaded subtitle file
-                # The filename will be {video_id}.{lang}.{ext}
-                # Look for json3 or json
-                files = glob.glob(os.path.join(temp_dir, "*"))
-                json_files = [f for f in files if f.endswith('.json3') or f.endswith('.json')]
-                
-                if not json_files:
-                     raise HTTPException(
-                        status_code=422,
-                        detail="No English subtitles/captions found for this video",
-                    )
-                
-                # Use the first found file
-                sub_path = json_files[0]
-                
-                with open(sub_path, 'r', encoding='utf-8') as f:
-                    sub_json = json.load(f)
-
-                # Extract text from json3 format
-                segments = []
-                for event in sub_json.get("events", []):
-                    segs = event.get("segs", [])
-                    text = "".join(s.get("utf8", "") for s in segs).strip()
-                    if text and text != "\n":
-                        segments.append(text)
-
-                transcript = " ".join(segments)
-                # Clean up whitespace
-                transcript = re.sub(r"\s+", " ", transcript).strip()
-
-                if not transcript:
-                    raise HTTPException(
-                        status_code=422, detail="Subtitles found but transcript is empty"
-                    )
-
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if info:
                 video_title = info.get("title", "Unknown")
                 video_channel = info.get("channel", info.get("uploader", "Unknown"))
                 video_duration = info.get("duration_string", "Unknown")
+    except Exception as e:
+        print(f"Metadata extraction warning: {e}")
+        # Continue to try transcript even if metadata fails (though unlikely)
 
-                return transcript, video_title, video_channel, video_duration
+    # 2. Get Transcript using youtube-transcript-api
+    try:
+        tta = YouTubeTranscriptApi()
+        transcript_list = tta.list(video_id)
+        
+        target = None
+        
+        # Priority: Manual English -> Manual Native (Vietnamese etc) -> Auto English -> Auto Native -> Any
+        # We try to find specific languages first
+        priority_langs = ['en', 'vi'] 
+        
+        # 1. Manual
+        try:
+            target = transcript_list.find_manually_created_transcript(priority_langs)
+        except:
+            pass
+            
+        # 2. Generated
+        if not target:
+            try:
+                target = transcript_list.find_generated_transcript(priority_langs)
+            except:
+                pass
+        
+        # 3. Fallback to any
+        if not target:
+            try:
+                # iterating gives us available transcripts, pick first
+                target = next(iter(transcript_list))
+            except StopIteration:
+                pass
+                
+        if not target:
+            raise HTTPException(status_code=422, detail="No suitable transcript found")
 
-        finally:
-            if cookie_file and os.path.exists(cookie_file.name):
-                os.unlink(cookie_file.name)
+        # Fetch
+        transcript_data = target.fetch()
+        
+        # transcript_data is a list of objects with .text attribute
+        # We need to join them
+        segments = []
+        for item in transcript_data:
+            # Check if it's an object or dict (based on installed version ambiguity)
+            text = ""
+            if hasattr(item, 'text'):
+                text = item.text
+            elif isinstance(item, dict) and 'text' in item:
+                text = item['text']
+            
+            if text:
+                segments.append(text)
+                
+        transcript = " ".join(segments)
+        transcript = re.sub(r"\s+", " ", transcript).strip()
+        
+        if not transcript:
+             raise HTTPException(status_code=422, detail="Transcript is empty")
+             
+        return transcript, video_title, video_channel, video_duration
+
+    except Exception as e:
+        # Map specific exceptions if possible, otherwise generic 500 or 422
+        # If it's a 404/VideoUnavailable from library
+        error_msg = str(e)
+        if "VideoUnavailable" in error_msg:
+             raise HTTPException(status_code=404, detail="Video unavailable")
+        elif "NoTranscriptFound" in error_msg:
+             raise HTTPException(status_code=422, detail="No transcript found")
+        else:
+             print(f"Transcript error: {e}")
+             raise HTTPException(status_code=500, detail=f"Failed to fetch transcript: {e}")
 
 
 def summarize_with_gemini(
