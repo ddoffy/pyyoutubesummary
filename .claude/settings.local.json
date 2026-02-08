@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m venv:*)",
+      "Bash(/home/ddoffy/workspace/python/pyyoutubesummary/.venv/bin/pip install:*)",
+      "Bash(git init:*)",
+      "Bash(git -C /home/ddoffy/workspace/python/pyyoutubesummary status)",
+      "Bash(git -C /home/ddoffy/workspace/python/pyyoutubesummary diff)",
+      "Bash(git -C /home/ddoffy/workspace/python/pyyoutubesummary log --oneline -5)"
+    ]
+  }
+}
